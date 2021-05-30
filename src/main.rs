@@ -1,11 +1,12 @@
 use native_tls::{Certificate, Identity, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
 use serde::{Deserialize, Serialize};
-use std::fs;
+use std::{fs, time};
+use tokio::time::{sleep, timeout};
 use tokio_postgres::{AsyncMessage, Config, Error};
 
 use futures::channel::mpsc;
-use futures::{future, stream, FutureExt, StreamExt, TryStreamExt};
+use futures::{join, stream, FutureExt, StreamExt, TryStreamExt};
 
 #[derive(Deserialize, Serialize)]
 struct ConfigurationBdd {
@@ -47,11 +48,11 @@ async fn main() -> Result<(), Error> {
     let configuration_bdd = lire_configuration();
 
     //fichier crt
-    let cert = fs::read(configuration_bdd.certificat_serveur).unwrap();
+    let cert = fs::read(configuration_bdd.certificat_serveur.to_owned()).unwrap();
     let cert = Certificate::from_pem(&cert).unwrap();
 
     //fichier pfx et mot de passe du fichier pfx
-    let certificat_client = fs::read(configuration_bdd.certificat_client).unwrap();
+    let certificat_client = fs::read(configuration_bdd.certificat_client.to_owned()).unwrap();
     let certificat_client = Identity::from_pkcs12(
         &certificat_client,
         &configuration_bdd.mot_de_passe_certificat_client,
@@ -65,7 +66,15 @@ async fn main() -> Result<(), Error> {
         .unwrap();
 
     let connector = MakeTlsConnector::new(connector);
+    demarrer_lecture_notifications(configuration_bdd, connector).await?;
 
+    Ok(())
+}
+
+async fn demarrer_lecture_notifications(
+    configuration_bdd: ConfigurationBdd,
+    connector: postgres_native_tls::MakeTlsConnector,
+) -> Result<(), Error> {
     let (client, mut connection) = Config::new()
         .host(&configuration_bdd.adresse)
         .port(configuration_bdd.port)
@@ -80,7 +89,7 @@ async fn main() -> Result<(), Error> {
     let stream =
         stream::poll_fn(move |cx| connection.poll_message(cx)).map_err(|e| panic!("{}", e));
     let connection = stream.forward(tx).map(|r| r.unwrap());
-    let handle = tokio::spawn(connection);
+    tokio::spawn(connection);
 
     client
         .batch_execute(
@@ -91,35 +100,67 @@ async fn main() -> Result<(), Error> {
         .await
         .unwrap();
 
-        let mut mes_notifications = Vec::<tokio_postgres::Notification>::new();
-    let a = lire_notifications(rx,&mut mes_notifications);
+    let mut mes_notifications = Vec::<tokio_postgres::Notification>::new();
 
+    let lire_version_resultat = lire_version(&client);
+    let lire_notifications_resultat = lire_notifications(&mut rx, &mut mes_notifications);
+    join!(lire_version_resultat, lire_notifications_resultat);
+    println!(
+        "Etape 1 : notification : {} {:?}",
+        &mut mes_notifications.len(),
+        &mut rx
+    );
+
+    mes_notifications = Vec::<tokio_postgres::Notification>::new();
+    let lire_version_resultat = lire_version(&client);
+    let lire_notifications_resultat = lire_notifications(&mut rx, &mut mes_notifications);
+    join!(lire_version_resultat, lire_notifications_resultat);
+    println!(
+        "Etape 2 : notification : {} {:?}",
+        &mut mes_notifications.len(),
+        &mut rx
+    );
+    rx.close();
+
+    Ok(())
+}
+
+async fn lire_version(client: &tokio_postgres::Client) -> Result<(), Error> {
     let lignes = client
         .query("SELECT $1::TEXT || version()", &[&"Connecté à "])
         .await?;
 
     let version: &str = lignes[0].get(0);
     println!("{}", version);
-    a.await;
-    println!("Notifications : {}",mes_notifications.len());
-    println!("Fin");
+    sleep(time::Duration::from_secs(5)).await;
+
     Ok(())
 }
 
-async fn lire_notifications(mut rx: mpsc::UnboundedReceiver<AsyncMessage>, mes_notifications: &mut Vec::<tokio_postgres::Notification>) {
-    while let Some(m) = rx.next().await {
-        match m {
-            AsyncMessage::Notification(n) => {
-                println!("{:?}", n);
-                 mes_notifications.push(n);
-                println!("Pour continuer envoyer manuellement une notification.");
-                 if mes_notifications.len()>2 {
-                rx.close();
-                 }
+async fn lire_notifications(
+    rx: &mut mpsc::UnboundedReceiver<AsyncMessage>,
+    mes_notifications: &mut Vec<tokio_postgres::Notification>,
+) -> Result<(), Error> {
+    let mut executer = true;
+    let mut attentes = 0;
+    while executer {
+        if let Ok(Some(m)) = timeout(time::Duration::from_secs(5), rx.next()).await {
+            println!("{:?}", m);
+            match m {
+                AsyncMessage::Notification(n) => {
+                    mes_notifications.push(n);
+                    println!("Pour continuer envoyer manuellement une notification.");
+                }
+                _ => {}
             }
-            _ => (),
+        } else {
+            println!("Delai d'attente dépassé");
+            attentes += 1;
         }
+
+        executer = mes_notifications.len() <= 2 && attentes < 5;
     }
+    Ok(())
 }
 
 fn lire_configuration() -> ConfigurationBdd {
