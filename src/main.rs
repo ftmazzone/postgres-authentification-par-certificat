@@ -1,8 +1,11 @@
 use native_tls::{Certificate, Identity, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
-use tokio_postgres::{Config, Error};
 use serde::{Deserialize, Serialize};
 use std::fs;
+use tokio_postgres::{AsyncMessage, Config, Error};
+
+use futures::channel::mpsc;
+use futures::{future, stream, FutureExt, StreamExt, TryStreamExt};
 
 #[derive(Deserialize, Serialize)]
 struct ConfigurationBdd {
@@ -63,7 +66,7 @@ async fn main() -> Result<(), Error> {
 
     let connector = MakeTlsConnector::new(connector);
 
-    let (client, connection) = Config::new()
+    let (client, mut connection) = Config::new()
         .host(&configuration_bdd.adresse)
         .port(configuration_bdd.port)
         .user(&configuration_bdd.utilisateur)
@@ -72,11 +75,24 @@ async fn main() -> Result<(), Error> {
         .connect(connector)
         .await?;
 
-    tokio::spawn(async move {
-        if let Err(e) = connection.await {
-            eprintln!("connection error: {}", e);
-        }
-    });
+    //Utilisant l'exemple de la page : https://github.com/sfackler/rust-postgres/blob/fc10985f9fdf0903893109bc951fb5891539bf97/tokio-postgres/tests/test/main.rs#L612
+    let (tx, mut rx) = mpsc::unbounded();
+    let stream =
+        stream::poll_fn(move |cx| connection.poll_message(cx)).map_err(|e| panic!("{}", e));
+    let connection = stream.forward(tx).map(|r| r.unwrap());
+    let handle = tokio::spawn(connection);
+
+    client
+        .batch_execute(
+            "LISTEN mes_notifications;
+         NOTIFY mes_notifications, 'ma_premiere_notification';
+         NOTIFY mes_notifications, 'ma_seconde_notification';",
+        )
+        .await
+        .unwrap();
+
+        let mut mes_notifications = Vec::<tokio_postgres::Notification>::new();
+    let a = lire_notifications(rx,&mut mes_notifications);
 
     let lignes = client
         .query("SELECT $1::TEXT || version()", &[&"Connecté à "])
@@ -84,7 +100,26 @@ async fn main() -> Result<(), Error> {
 
     let version: &str = lignes[0].get(0);
     println!("{}", version);
+    a.await;
+    println!("Notifications : {}",mes_notifications.len());
+    println!("Fin");
     Ok(())
+}
+
+async fn lire_notifications(mut rx: mpsc::UnboundedReceiver<AsyncMessage>, mes_notifications: &mut Vec::<tokio_postgres::Notification>) {
+    while let Some(m) = rx.next().await {
+        match m {
+            AsyncMessage::Notification(n) => {
+                println!("{:?}", n);
+                 mes_notifications.push(n);
+                println!("Pour continuer envoyer manuellement une notification.");
+                 if mes_notifications.len()>2 {
+                rx.close();
+                 }
+            }
+            _ => (),
+        }
+    }
 }
 
 fn lire_configuration() -> ConfigurationBdd {
@@ -111,8 +146,7 @@ fn lire_configuration() -> ConfigurationBdd {
                         e
                     ),
                 };
-
-           } else {
+            } else {
                 panic!(
                     "Erreur lors de la lecture du fichier de configuration : {:#?}",
                     e
