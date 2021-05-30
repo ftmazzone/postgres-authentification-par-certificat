@@ -1,0 +1,42 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'postgres-authentification-par-certificat'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=postgres-authentification-par-certificat",
+                    "--package=postgres-authentification-par-certificat"
+                ],
+                "filter": {
+                    "name": "postgres-authentification-par-certificat",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'postgres-authentification-par-certificat'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=postgres-authentification-par-certificat",
+                    "--package=postgres-authentification-par-certificat"
+                ],
+                "filter": {
+                    "name": "postgres-authentification-par-certificat",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

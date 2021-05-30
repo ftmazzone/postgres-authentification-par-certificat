@@ -1,0 +1,14 @@
+[package]
+name = "postgres-authentification-par-certificat"
+version = "0.1.0"
+authors = ["Florent Mazzone"]
+edition = "2018"
+license = "MIT"
+
+[dependencies]
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio-postgres = "0"
+postgres-native-tls = "0"
+native-tls = "0"
