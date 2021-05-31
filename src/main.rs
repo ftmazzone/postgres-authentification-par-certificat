@@ -1,6 +1,9 @@
 use native_tls::{Certificate, Identity, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
 use serde::{Deserialize, Serialize};
+use simple_signal::{self, Signal};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::{fs, time};
 use tokio::time::{sleep, timeout};
 use tokio_postgres::{AsyncMessage, Config, Error};
@@ -44,6 +47,13 @@ impl Default for ConfigurationBdd {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    let operationnel = Arc::new(AtomicBool::new(true));
+    let r = operationnel.clone();
+    simple_signal::set_handler(&[Signal::Int, Signal::Term], move |signal_recu| {
+        println!("Signal reçu : '{:?}'", signal_recu);
+        r.store(false, Ordering::SeqCst);
+    });
+
     lire_configuration();
     let configuration_bdd = lire_configuration();
 
@@ -66,12 +76,13 @@ async fn main() -> Result<(), Error> {
         .unwrap();
 
     let connector = MakeTlsConnector::new(connector);
-    demarrer_lecture_notifications(configuration_bdd, connector).await?;
+    demarrer_lecture_notifications(&operationnel, configuration_bdd, connector).await?;
 
     Ok(())
 }
 
 async fn demarrer_lecture_notifications(
+    operationnel: &Arc<AtomicBool>,
     configuration_bdd: ConfigurationBdd,
     connector: postgres_native_tls::MakeTlsConnector,
 ) -> Result<(), Error> {
@@ -103,7 +114,8 @@ async fn demarrer_lecture_notifications(
     let mut mes_notifications = Vec::<tokio_postgres::Notification>::new();
 
     let lire_version_resultat = lire_version(&client);
-    let lire_notifications_resultat = lire_notifications(&mut rx, &mut mes_notifications);
+    let lire_notifications_resultat =
+        lire_notifications(&operationnel, &mut rx, &mut mes_notifications);
     let (t1, t2) = join!(lire_version_resultat, lire_notifications_resultat);
 
     if t1.is_ok() && t2.is_ok() {
@@ -116,7 +128,8 @@ async fn demarrer_lecture_notifications(
 
     mes_notifications = Vec::<tokio_postgres::Notification>::new();
     let lire_version_resultat = lire_version(&client);
-    let lire_notifications_resultat = lire_notifications(&mut rx, &mut mes_notifications);
+    let lire_notifications_resultat =
+        lire_notifications(&operationnel, &mut rx, &mut mes_notifications);
     let (t1, t2) = join!(lire_version_resultat, lire_notifications_resultat);
 
     if t1.is_ok() && t2.is_ok() {
@@ -144,27 +157,20 @@ async fn lire_version(client: &tokio_postgres::Client) -> Result<(), Error> {
 }
 
 async fn lire_notifications(
+    operationnel: &Arc<AtomicBool>,
     rx: &mut mpsc::UnboundedReceiver<AsyncMessage>,
     mes_notifications: &mut Vec<tokio_postgres::Notification>,
 ) -> Result<(), Error> {
-    let mut executer = true;
-    let mut attentes = 0;
-    while executer {
+    while operationnel.load(Ordering::SeqCst) {
         if let Ok(Some(m)) = timeout(time::Duration::from_secs(5), rx.next()).await {
             println!("{:?}", m);
             match m {
                 AsyncMessage::Notification(n) => {
                     mes_notifications.push(n);
-                    println!("Pour continuer envoyer manuellement une notification.");
                 }
                 _ => {}
             }
-        } else {
-            println!("Delai d'attente dépassé");
-            attentes += 1;
         }
-
-        executer = mes_notifications.len() <= 2 && attentes < 5;
     }
     Ok(())
 }
