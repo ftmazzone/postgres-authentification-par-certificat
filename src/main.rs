@@ -104,22 +104,28 @@ async fn demarrer_lecture_notifications(
 
     let lire_version_resultat = lire_version(&client);
     let lire_notifications_resultat = lire_notifications(&mut rx, &mut mes_notifications);
-    join!(lire_version_resultat, lire_notifications_resultat);
-    println!(
-        "Etape 1 : notification : {} {:?}",
-        &mut mes_notifications.len(),
-        &mut rx
-    );
+    let (t1, t2) = join!(lire_version_resultat, lire_notifications_resultat);
+
+    if t1.is_ok() && t2.is_ok() {
+        println!(
+            "Etape 1 : notification : {} {:?}",
+            &mut mes_notifications.len(),
+            &mut rx
+        );
+    }
 
     mes_notifications = Vec::<tokio_postgres::Notification>::new();
     let lire_version_resultat = lire_version(&client);
     let lire_notifications_resultat = lire_notifications(&mut rx, &mut mes_notifications);
-    join!(lire_version_resultat, lire_notifications_resultat);
-    println!(
-        "Etape 2 : notification : {} {:?}",
-        &mut mes_notifications.len(),
-        &mut rx
-    );
+    let (t1, t2) = join!(lire_version_resultat, lire_notifications_resultat);
+
+    if t1.is_ok() && t2.is_ok() {
+        println!(
+            "Etape 2 : notification : {} {:?}",
+            &mut mes_notifications.len(),
+            &mut rx
+        );
+    }
     rx.close();
 
     Ok(())
