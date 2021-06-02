@@ -1,12 +1,11 @@
-
+use configuration_bdd::ConfigurationBdd;
 use futures::channel::mpsc;
-use futures::{join, stream, FutureExt, StreamExt, TryStreamExt};
+use futures::{join, stream, task, FutureExt, StreamExt, TryStreamExt};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::{time,thread};
 use tokio::time::{sleep, timeout};
 use tokio_postgres::{AsyncMessage, Config, Error};
-use configuration_bdd::{ConfigurationBdd};
-use std::sync::Arc;
-use std::{time};
 
 use crate::configuration_bdd;
 
@@ -24,10 +23,34 @@ pub async fn demarrer_lecture_notifications(
         .connect(connector)
         .await?;
 
+
+       
     //Utilisant l'exemple de la page : https://github.com/sfackler/rust-postgres/blob/fc10985f9fdf0903893109bc951fb5891539bf97/tokio-postgres/tests/test/main.rs#L612
     let (tx, mut rx) = mpsc::unbounded();
-    let stream =
-        stream::poll_fn(move |cx| connection.poll_message(cx)).map_err(|e| panic!("{}", e));
+    let stream = stream::poll_fn(
+        move |cx| -> std::task::Poll<
+            std::option::Option<
+                std::result::Result<tokio_postgres::AsyncMessage, tokio_postgres::Error>,
+            >,
+        > {
+            let message = connection.poll_message(cx);
+            match message {
+                std::task::Poll::Ready(m) => match m {
+                    Some(i) => match i {
+                        Ok(n) => std::task::Poll::Ready(Some(Result::Ok(n))),
+                        Err(e) => {
+                            println!("erreur {:?}",e);
+                          return  std::task::Poll::Ready(None);
+                    }
+                    },
+                    None =>  std::task::Poll::Ready(None)
+                },
+                std::task::Poll::Pending => message
+            }
+        },
+    )
+    .map_err(|e| panic!("{}", e));
+
     let connection = stream.forward(tx).map(|r| r.unwrap());
     tokio::spawn(connection);
 
@@ -92,7 +115,9 @@ async fn lire_notifications(
 ) -> Result<(), Error> {
     println!("Presser '^C' pour quitter la boucle\n");
     while operationnel.load(Ordering::SeqCst) {
-        if let Ok(Some(m)) = timeout(time::Duration::from_secs(5), rx.next()).await {
+        let resultat_attente = timeout(time::Duration::from_secs(5), rx.next()).await;
+        println!("{:?}", resultat_attente);
+        if  let Ok(Some(m)) = resultat_attente {
             println!("{:?}", m);
             match m {
                 AsyncMessage::Notification(n) => {
