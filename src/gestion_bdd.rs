@@ -34,16 +34,13 @@ pub async fn demarrer_lecture_notifications(
         > {
             let message = connection.poll_message(cx);
             match message {
-                std::task::Poll::Ready(m) => match m {
-                    Some(i) => match i {
-                        Ok(n) => std::task::Poll::Ready(Some(Result::Ok(n))),
-                        Err(e) => {
-                            println!("erreur {:?}", e);
-                            return std::task::Poll::Ready(None);
-                        }
-                    },
-                    None => std::task::Poll::Ready(None),
-                },
+                std::task::Poll::Ready(Some(Ok(_))) => message,
+                std::task::Poll::Ready(Some(Err(e))) => {
+                    //Transformer les erreurs de connexions pour ne pas générer une erreur fatale
+                    println!("erreur {:?}", e);
+                    return std::task::Poll::Ready(None);
+                }
+                std::task::Poll::Ready(None) => message,
                 std::task::Poll::Pending => message,
             }
         },
