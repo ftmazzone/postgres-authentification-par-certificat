@@ -7,7 +7,7 @@ pub struct ConfigurationBdd {
     pub port: u16,
     pub utilisateur: String,
     #[serde(rename = "motDePasse")]
-    pub mot_de_passe: String,
+    pub mot_de_passe: Option<String>,
     #[serde(rename = "baseDeDonnees")]
     pub base_de_donnees: String,
     pub application: String,
@@ -16,7 +16,7 @@ pub struct ConfigurationBdd {
     #[serde(rename = "certificatClient")]
     pub certificat_client: Option<String>,
     #[serde(rename = "motDePasseCertificatClient")]
-    pub mot_de_passe_certificat_client: String,
+    pub mot_de_passe_certificat_client: Option<String>,
 }
 
 impl Default for ConfigurationBdd {
@@ -25,12 +25,12 @@ impl Default for ConfigurationBdd {
             adresse: "localhost".to_string(),
             port: 5432,
             utilisateur: "postgres".to_string(),
-            mot_de_passe: "******".to_string(),
+            mot_de_passe: Some("******".to_string()),
             base_de_donnees: "postgres".to_string(),
             application: "mon_application".to_string(),
             certificat_serveur: "./certificats/serveur.crt".to_string(),
             certificat_client: Some("./certificats/client.pfx".to_string()),
-            mot_de_passe_certificat_client: "******".to_string(),
+            mot_de_passe_certificat_client: Some("******".to_string()),
         }
     }
 }

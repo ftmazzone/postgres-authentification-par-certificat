@@ -21,7 +21,7 @@ async fn main() -> Result<(), Error> {
     });
 
     lire_configuration();
-    let  configuration_bdd = lire_configuration();
+    let configuration_bdd = lire_configuration();
 
     let mut connector_builder = TlsConnector::builder();
 
@@ -31,16 +31,15 @@ async fn main() -> Result<(), Error> {
     connector_builder.add_root_certificate(cert);
 
     //fichier pfx et mot de passe du fichier pfx
-    if let Some(ref certificat_client) = configuration_bdd.certificat_client
-     {
-        let certificat_client = fs::read(certificat_client.to_owned()).unwrap();
-        let certificat_client = Identity::from_pkcs12(
-            &certificat_client,
-            &configuration_bdd.mot_de_passe_certificat_client,
-        )
-        .unwrap();
-
-        connector_builder.identity(certificat_client);
+    if let Some(ref certificat_client) = configuration_bdd.certificat_client {
+        if let Some(ref mot_de_passe_certificat_client) =
+            configuration_bdd.mot_de_passe_certificat_client
+        {
+            let certificat_client = fs::read(certificat_client.to_owned()).unwrap();
+            let certificat_client =
+                Identity::from_pkcs12(&certificat_client, &mot_de_passe_certificat_client).unwrap();
+            connector_builder.identity(certificat_client);
+        }
     }
 
     let connecteur_tls = connector_builder.build().unwrap();
