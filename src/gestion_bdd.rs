@@ -15,14 +15,20 @@ pub async fn demarrer_lecture_notifications(
     configuration_bdd: ConfigurationBdd,
     connector: postgres_native_tls::MakeTlsConnector,
 ) -> Result<(), tokio_postgres::Error> {
-    let (client, mut connection) = Config::new()
+    let mut configuration_connexion = Config::new();
+
+    configuration_connexion
         .host(&configuration_bdd.adresse)
         .port(configuration_bdd.port)
         .user(&configuration_bdd.utilisateur)
         .dbname(&configuration_bdd.base_de_donnees)
-        .application_name(&configuration_bdd.application)
-        .connect(connector)
-        .await?;
+        .application_name(&configuration_bdd.application);
+
+    if let Some(mot_de_passe) = &configuration_bdd.mot_de_passe {
+        configuration_connexion.password(mot_de_passe);
+    }
+
+    let (client, mut connection) = configuration_connexion.connect(connector).await?;
 
     //Utilisant l'exemple de la page : https://github.com/sfackler/rust-postgres/blob/fc10985f9fdf0903893109bc951fb5891539bf97/tokio-postgres/tests/test/main.rs#L612
     let (tx, mut rx) = mpsc::unbounded();
@@ -89,11 +95,15 @@ pub async fn demarrer_lecture_notifications(
 
 async fn lire_version(client: &tokio_postgres::Client) -> Result<(), tokio_postgres::Error> {
     let lignes = client
-        .query("SELECT $1::TEXT || version()", &[&"Connecté à "])
+        .query(
+            "SELECT $1::TEXT || version(),current_database()",
+            &[&"Connecté à "],
+        )
         .await?;
 
     let version: &str = lignes[0].get(0);
-    println!("{}", version);
+    let nom_base_de_donnees: &str = lignes[0].get(1);
+    println!("{}. Base de données : '{}'", version, nom_base_de_donnees);
     sleep(time::Duration::from_secs(5)).await;
 
     Ok(())
