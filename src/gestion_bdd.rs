@@ -26,25 +26,19 @@ pub async fn demarrer_lecture_notifications(
 
     //Utilisant l'exemple de la page : https://github.com/sfackler/rust-postgres/blob/fc10985f9fdf0903893109bc951fb5891539bf97/tokio-postgres/tests/test/main.rs#L612
     let (tx, mut rx) = mpsc::unbounded();
-    let stream = stream::poll_fn(
-        move |cx| -> std::task::Poll<
-            std::option::Option<
-                std::result::Result<tokio_postgres::AsyncMessage, tokio_postgres::Error>,
-            >,
-        > {
-            let message = connection.poll_message(cx);
-            match message {
-                std::task::Poll::Ready(Some(Ok(_))) => message,
-                std::task::Poll::Ready(Some(Err(e))) => {
-                    //Transformer les erreurs de connexions pour ne pas générer une erreur fatale
-                    println!("erreur {:?}", e);
-                    return std::task::Poll::Ready(None);
-                }
-                std::task::Poll::Ready(None) => message,
-                std::task::Poll::Pending => message,
+    let stream = stream::poll_fn(move |cx| {
+        let message = connection.poll_message(cx);
+        match message {
+            std::task::Poll::Ready(Some(Ok(_))) => message,
+            std::task::Poll::Ready(Some(Err(e))) => {
+                //Transformer les erreurs de connexions pour ne pas générer une erreur fatale
+                println!("erreur {:?}", e);
+                return std::task::Poll::Ready(None);
             }
-        },
-    )
+            std::task::Poll::Ready(None) => message,
+            std::task::Poll::Pending => message,
+        }
+    })
     .map_err(|e| panic!("{}", e));
 
     let connection = stream.forward(tx).map(|r| r.unwrap());
