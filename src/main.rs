@@ -1,12 +1,12 @@
+use configuration_bdd::lire_configuration;
+use gestion_bdd::demarrer_lecture_notifications;
 use native_tls::{Certificate, Identity, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
 use simple_signal::{self, Signal};
+use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tokio_postgres::{Error};
-use std::{fs};
-use configuration_bdd::{lire_configuration};
-use gestion_bdd::{demarrer_lecture_notifications};
+use tokio_postgres::Error;
 
 mod configuration_bdd;
 mod gestion_bdd;
@@ -21,31 +21,32 @@ async fn main() -> Result<(), Error> {
     });
 
     lire_configuration();
-    let configuration_bdd = lire_configuration();
+    let  configuration_bdd = lire_configuration();
 
-    //fichier crt
+    let mut connector_builder = TlsConnector::builder();
+
+    //fichier crt du serveur de base de données
     let cert = fs::read(configuration_bdd.certificat_serveur.to_owned()).unwrap();
     let cert = Certificate::from_pem(&cert).unwrap();
+    connector_builder.add_root_certificate(cert);
 
     //fichier pfx et mot de passe du fichier pfx
-    let certificat_client = fs::read(configuration_bdd.certificat_client.to_owned()).unwrap();
-    let certificat_client = Identity::from_pkcs12(
-        &certificat_client,
-        &configuration_bdd.mot_de_passe_certificat_client,
-    )
-    .unwrap();
-
-    let connector = TlsConnector::builder()
-        .add_root_certificate(cert)
-        .identity(certificat_client)
-        .build()
+    if let Some(ref certificat_client) = configuration_bdd.certificat_client
+     {
+        let certificat_client = fs::read(certificat_client.to_owned()).unwrap();
+        let certificat_client = Identity::from_pkcs12(
+            &certificat_client,
+            &configuration_bdd.mot_de_passe_certificat_client,
+        )
         .unwrap();
 
-    let connector = MakeTlsConnector::new(connector);
+        connector_builder.identity(certificat_client);
+    }
+
+    let connecteur_tls = connector_builder.build().unwrap();
+
+    let connector = MakeTlsConnector::new(connecteur_tls);
     demarrer_lecture_notifications(&operationnel, configuration_bdd, connector).await?;
 
     Ok(())
 }
-
-
-

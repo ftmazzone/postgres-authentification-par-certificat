@@ -1,3 +1,4 @@
 target/
 certificats/
 configuration.json
+configuration.json.*

@@ -19,6 +19,7 @@ pub async fn demarrer_lecture_notifications(
         .host(&configuration_bdd.adresse)
         .port(configuration_bdd.port)
         .user(&configuration_bdd.utilisateur)
+        .password(configuration_bdd.mot_de_passe)
         .dbname(&configuration_bdd.base_de_donnees)
         .application_name(&configuration_bdd.application)
         .connect(connector)
@@ -75,11 +76,12 @@ pub async fn demarrer_lecture_notifications(
 
 async fn lire_version(client: &tokio_postgres::Client) -> Result<(), Error> {
     let lignes = client
-        .query("SELECT $1::TEXT || version()", &[&"Connecté à "])
+        .query("SELECT $1::TEXT || version(),current_database()", &[&"Connecté à "])
         .await?;
 
     let version: &str = lignes[0].get(0);
-    println!("{}", version);
+    let nom_base_de_donnees:&str = lignes[0].get(1);
+    println!("{}. Base de données : '{}'", version,nom_base_de_donnees);
     sleep(time::Duration::from_secs(5)).await;
 
     Ok(())

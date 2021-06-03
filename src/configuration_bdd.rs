@@ -14,7 +14,7 @@ pub struct ConfigurationBdd {
     #[serde(rename = "certificatServeur")]
     pub certificat_serveur: String,
     #[serde(rename = "certificatClient")]
-    pub certificat_client: String,
+    pub certificat_client: Option<String>,
     #[serde(rename = "motDePasseCertificatClient")]
     pub mot_de_passe_certificat_client: String,
 }
@@ -29,7 +29,7 @@ impl Default for ConfigurationBdd {
             base_de_donnees: "postgres".to_string(),
             application: "mon_application".to_string(),
             certificat_serveur: "./certificats/serveur.crt".to_string(),
-            certificat_client: "./certificats/client.pfx".to_string(),
+            certificat_client: Some("./certificats/client.pfx".to_string()),
             mot_de_passe_certificat_client: "******".to_string(),
         }
     }
