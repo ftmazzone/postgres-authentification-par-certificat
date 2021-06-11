@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize,Clone)]
 pub struct ConfigurationBdd {
     pub adresse: String,
     pub port: u16,
