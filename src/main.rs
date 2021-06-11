@@ -1,5 +1,5 @@
 use configuration_bdd::lire_configuration;
-use gestion_bdd::demarrer_lecture_notifications;
+use lecture_notifications::demarrer;
 use native_tls::{Certificate, Identity, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
 use simple_signal::{self, Signal};
@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tokio_postgres::Error;
 
 mod configuration_bdd;
-mod gestion_bdd;
+mod lecture_notifications;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -45,7 +45,7 @@ async fn main() -> Result<(), Error> {
     let connecteur_tls = connector_builder.build().unwrap();
 
     let connector = MakeTlsConnector::new(connecteur_tls);
-    demarrer_lecture_notifications(&operationnel, configuration_bdd, connector).await?;
+    demarrer(&operationnel, configuration_bdd, connector).await?;
 
     Ok(())
 }
