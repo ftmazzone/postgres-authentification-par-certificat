@@ -20,6 +20,7 @@ async fn main() -> Result<(), Error> {
     let operationnel_arret = operationnel.clone();
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.unwrap();
+        log::info!("Arrêt demandé");
         operationnel_arret.store(false, Ordering::SeqCst);
     });
 

@@ -70,7 +70,7 @@ pub async fn demarrer(
                         break;
                     }
                     Err(_err) => {
-                        if operationnel.load(Ordering::SeqCst) {
+                        if !operationnel.load(Ordering::SeqCst) {
                             break;
                         }
                     }
