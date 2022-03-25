@@ -1,8 +1,7 @@
 use configuration_bdd::lire_configuration;
-use lecture_notifications::demarrer;
+use futures::join;
 use native_tls::{Certificate, Identity, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
-use simple_signal::{self, Signal};
 use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -10,14 +9,18 @@ use tokio_postgres::Error;
 
 mod configuration_bdd;
 mod lecture_notifications;
+mod lecture_notifications_flume;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
+    env_logger::init();
+
     let operationnel = Arc::new(AtomicBool::new(true));
-    let r = operationnel.clone();
-    simple_signal::set_handler(&[Signal::Int, Signal::Term], move |signal_recu| {
-        println!("Signal reçu : '{:?}'", signal_recu);
-        r.store(false, Ordering::SeqCst);
+
+    let operationnel_arret = operationnel.clone();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.unwrap();
+        operationnel_arret.store(false, Ordering::SeqCst);
     });
 
     lire_configuration();
@@ -43,9 +46,22 @@ async fn main() -> Result<(), Error> {
     }
 
     let connecteur_tls = connector_builder.build().unwrap();
+    let connecteur = MakeTlsConnector::new(connecteur_tls.clone());
+    let connecteur_flume = MakeTlsConnector::new(connecteur_tls.clone());
+    let operationnel_flume = operationnel.clone();
 
-    let connector = MakeTlsConnector::new(connecteur_tls);
-    demarrer(&operationnel, configuration_bdd, connector).await?;
+    let (_resultat1, _resultat2) = join!(
+        lecture_notifications::demarrer(
+            &operationnel,
+            configuration_bdd.clone(),
+            connecteur,
+        ),
+        lecture_notifications_flume::demarrer(
+            &operationnel_flume,
+            configuration_bdd.clone(),
+            connecteur_flume
+        )
+    );
 
     Ok(())
 }
