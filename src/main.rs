@@ -1,6 +1,6 @@
 use configuration_bdd::lire_configuration;
 use futures::join;
-use native_tls::{Certificate, Identity, TlsConnector};
+use native_tls::{Identity, TlsConnector};
 use postgres_native_tls::MakeTlsConnector;
 use std::fs;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -27,24 +27,36 @@ async fn main() -> Result<(), Error> {
     lire_configuration();
     let configuration_bdd = lire_configuration();
 
+    let certificat_autorite_base_de_donnees =
+        fs::read(configuration_bdd.certificat_autorite_bdd.to_string()).expect(&format!(
+            "Erreur lecture fichier {}",
+            configuration_bdd.certificat_autorite_bdd
+        ));
+    let certificat_autorite_base_de_donnees =
+        native_tls::Certificate::from_pem(&certificat_autorite_base_de_donnees).expect(&format!(
+            "Erreur lecture fichier {}",
+            configuration_bdd.certificat_autorite_bdd
+        ));
+
     let mut connector_builder = TlsConnector::builder();
+    connector_builder.add_root_certificate(certificat_autorite_base_de_donnees);
 
-    //fichier crt du serveur de base de données
-    let cert = fs::read(configuration_bdd.certificat_serveur.to_owned()).unwrap();
-    let cert = Certificate::from_pem(&cert).unwrap();
-    connector_builder.add_root_certificate(cert);
-
-    //fichier pfx et mot de passe du fichier pfx
-    if let Some(ref certificat_client) = configuration_bdd.certificat_client {
-        if let Some(ref mot_de_passe_certificat_client) =
-            configuration_bdd.mot_de_passe_certificat_client
-        {
-            let certificat_client = fs::read(certificat_client.to_owned()).unwrap();
-            let certificat_client =
-                Identity::from_pkcs12(&certificat_client, &mot_de_passe_certificat_client).unwrap();
-            connector_builder.identity(certificat_client);
-        }
-    }
+    let certificat_client_base_de_donnees =
+        fs::read(configuration_bdd.certificat_client.as_ref().unwrap()).expect(&format!(
+            "Erreur lecture fichier certificat client de la base de données{:?}",
+            configuration_bdd.certificat_client
+        ));
+    let certificat_client_base_de_donnees_clef =
+        fs::read(configuration_bdd.certificat_client_clef.as_ref().unwrap()).expect(&format!(
+            "Erreur lecture fichier clef du certificat client de la base de données {:?}",
+            configuration_bdd.certificat_client_clef
+        ));
+    let certificat_client_base_de_donnees = Identity::from_pkcs8(
+        &certificat_client_base_de_donnees,
+        &certificat_client_base_de_donnees_clef,
+    )
+    .unwrap();
+    connector_builder.identity(certificat_client_base_de_donnees);
 
     let connecteur_tls = connector_builder.build().unwrap();
     let connecteur = MakeTlsConnector::new(connecteur_tls.clone());
@@ -52,11 +64,7 @@ async fn main() -> Result<(), Error> {
     let operationnel_flume = operationnel.clone();
 
     let (_resultat1, _resultat2) = join!(
-        lecture_notifications::demarrer(
-            &operationnel,
-            configuration_bdd.clone(),
-            connecteur,
-        ),
+        lecture_notifications::demarrer(&operationnel, configuration_bdd.clone(), connecteur,),
         lecture_notifications_flume::demarrer(
             &operationnel_flume,
             configuration_bdd.clone(),

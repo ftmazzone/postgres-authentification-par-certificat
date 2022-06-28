@@ -1,22 +1,18 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-#[derive(Deserialize, Serialize,Clone)]
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct ConfigurationBdd {
     pub adresse: String,
     pub port: u16,
     pub utilisateur: String,
-    #[serde(rename = "motDePasse")]
     pub mot_de_passe: Option<String>,
-    #[serde(rename = "baseDeDonnees")]
     pub base_de_donnees: String,
     pub application: String,
-    #[serde(rename = "certificatServeur")]
-    pub certificat_serveur: String,
-    #[serde(rename = "certificatClient")]
+    pub certificat_autorite_bdd: String,
     pub certificat_client: Option<String>,
-    #[serde(rename = "motDePasseCertificatClient")]
-    pub mot_de_passe_certificat_client: Option<String>,
+    pub certificat_client_clef: Option<String>,
 }
 
 impl Default for ConfigurationBdd {
@@ -35,9 +31,9 @@ impl Default for ConfigurationBdd {
             mot_de_passe: Some("******".to_string()),
             base_de_donnees: "postgres".to_string(),
             application: nom_programme.to_string(),
-            certificat_serveur: "./certificats/serveur.crt".to_string(),
-            certificat_client: Some("./certificats/client.pfx".to_string()),
-            mot_de_passe_certificat_client: Some("******".to_string()),
+            certificat_autorite_bdd: "./certificats/serveur.crt".to_string(),
+            certificat_client: Some("./certificats/client.crt".to_string()),
+            certificat_client_clef: Some("./certificats/client.key".to_string()),
         }
     }
 }
